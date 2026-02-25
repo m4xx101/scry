@@ -1,0 +1,96 @@
+# ============================================================================
+# scry - High-Impact Security Dorks
+# Use with: scry.py files -d target.com --dorks-file dorks.txt --download
+# Placeholders: {domain} = target domain, {company} = company name
+# ============================================================================
+
+# --- Sensitive Documents ---
+site:{domain} filetype:pdf
+site:{domain} filetype:doc OR filetype:docx
+site:{domain} filetype:xls OR filetype:xlsx
+site:{domain} filetype:ppt OR filetype:pptx
+site:{domain} filetype:odt OR filetype:ods
+site:{domain} filetype:rtf
+site:{domain} filetype:pdf "confidential" OR "internal" OR "not for distribution"
+site:{domain} filetype:docx "password" OR "credentials" OR "secret"
+site:{domain} filetype:xlsx "employee" OR "salary" OR "ssn"
+
+# --- Configuration & Environment Files ---
+site:{domain} filetype:env
+site:{domain} filetype:cfg
+site:{domain} filetype:conf
+site:{domain} filetype:ini
+site:{domain} filetype:yaml OR filetype:yml
+site:{domain} filetype:xml "password" OR "secret"
+site:{domain} filetype:json "api_key" OR "token" OR "secret"
+site:{domain} inurl:web.config
+site:{domain} inurl:wp-config
+site:{domain} inurl:.htaccess
+site:{domain} inurl:crossdomain.xml
+site:{domain} inurl:robots.txt
+
+# --- Exposed Credentials & Passwords ---
+site:{domain} "password" filetype:txt
+site:{domain} "password" filetype:log
+site:{domain} "username" "password" filetype:csv
+site:{domain} inurl:credentials
+site:{domain} intitle:"index of" "password"
+site:{domain} filetype:sql "password"
+site:{domain} filetype:log "password" OR "auth" OR "token"
+
+# --- Database Dumps & Backups ---
+site:{domain} filetype:sql
+site:{domain} filetype:bak
+site:{domain} filetype:old
+site:{domain} filetype:backup
+site:{domain} filetype:dump
+site:{domain} filetype:tar.gz OR filetype:zip "backup"
+site:{domain} intitle:"index of" "database" OR "dump" OR "sql"
+
+# --- Admin Panels & Login Pages ---
+site:{domain} inurl:admin
+site:{domain} inurl:login
+site:{domain} inurl:portal
+site:{domain} inurl:dashboard
+site:{domain} intitle:"admin" OR intitle:"login" OR intitle:"dashboard"
+site:{domain} inurl:wp-admin OR inurl:wp-login
+
+# --- Directory Listings ---
+intitle:"index of" site:{domain}
+intitle:"index of" site:{domain} "parent directory"
+intitle:"index of" site:{domain} ".git"
+intitle:"index of" site:{domain} ".svn"
+intitle:"index of" site:{domain} ".env"
+
+# --- Error Pages & Stack Traces ---
+site:{domain} "fatal error" OR "stack trace" OR "syntax error"
+site:{domain} "mysql_connect" OR "ORA-" OR "PostgreSQL"
+site:{domain} "Warning:" filetype:php
+site:{domain} inurl:debug OR inurl:trace
+site:{domain} "server at" intitle:"Apache" OR intitle:"nginx"
+
+# --- API Keys & Tokens ---
+site:{domain} "api_key" OR "apikey" OR "api-key"
+site:{domain} "access_token" OR "auth_token"
+site:{domain} "BEGIN RSA PRIVATE KEY"
+site:{domain} "AWS_SECRET_ACCESS_KEY" OR "AKIA"
+
+# --- Cloud Storage Exposure ---
+site:s3.amazonaws.com "{domain}"
+site:s3.amazonaws.com "{company}"
+site:blob.core.windows.net "{domain}"
+site:storage.googleapis.com "{domain}"
+
+# --- Source Code & Git ---
+site:{domain} filetype:py OR filetype:php OR filetype:js "password" OR "secret"
+site:{domain} inurl:.git
+site:github.com "{domain}" "password" OR "secret" OR "token"
+site:gitlab.com "{domain}" "password" OR "secret"
+site:bitbucket.org "{domain}"
+
+# --- Subdomain & Infrastructure Discovery ---
+site:*.{domain}
+site:{domain} inurl:api
+site:{domain} inurl:dev OR inurl:staging OR inurl:test
+site:{domain} inurl:jenkins OR inurl:jira OR inurl:confluence
+
