@@ -1,7 +1,4 @@
 # scry
-OSINT dorking toolkit - contact harvesting + sensitive file discovery via Serper API and Playwright browser.
-
-# scry
 
 Dorking + contact harvesting in one tool. Built for pentesters who got tired of running three different scripts and copy-pasting between them.
 
