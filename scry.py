@@ -228,6 +228,11 @@ def make_run_dir(base: str, kind: str, label: str) -> str:
     ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     safe_label = re.sub(r"[^a-zA-Z0-9_-]", "_", label)[:40]
     d = os.path.join(base, f"{ts}_{kind}_{safe_label}")
+    if os.path.exists(d):
+        n = 2
+        while os.path.exists(f"{d}_run{n}"):
+            n += 1
+        d = f"{d}_run{n}"
     Path(d).mkdir(parents=True, exist_ok=True)
     return d
 
@@ -864,36 +869,62 @@ def cmd_contacts(args, cfg, api_key):
 
     if stdout_mode:
         write_to_stdout(emails, fmt_out)
-        return 0
 
     if out_dir_base:
         run_dir = make_run_dir(out_dir_base, "contacts", company)
-        write_output(emails, os.path.join(run_dir, f"emails.{fmt_out}"), fmt_out)
+        src_label = "Serper + Browser" if (use_serper and use_browser) else ("Serper" if use_serper else "Browser")
+
         write_output(emails, os.path.join(run_dir, "emails.txt"), "txt")
-        titles_path = os.path.join(run_dir, "raw_titles.txt")
-        with open(titles_path, "w", encoding="utf-8") as f:
+        if fmt_out != "txt":
+            write_output(emails, os.path.join(run_dir, f"emails.{fmt_out}"), fmt_out)
+
+        with open(os.path.join(run_dir, "names.txt"), "w", encoding="utf-8") as f:
+            for e in emails:
+                f.write(e["name"] + "\n")
+
+        with open(os.path.join(run_dir, "raw_titles.txt"), "w", encoding="utf-8") as f:
             for e in emails:
                 f.write(e.get("raw_title", "") + "\n")
-        if save_names_path or True:
-            names_path = os.path.join(run_dir, "names.txt")
-            with open(names_path, "w", encoding="utf-8") as f:
-                for e in emails:
-                    f.write(e["name"] + "\n")
+
         log_lines = [
-            "scry contacts run",
-            f"Date: {datetime.now().isoformat()}",
-            f"Company: {company}",
-            f"Domain: {domain}",
-            f"Source: {'Serper + Browser' if (use_serper and use_browser) else ('Serper' if use_serper else 'Browser')}",
-            f"Queries: {len(queries)}",
-            f"Raw results: {len(all_items)}",
-            f"Unique names: {len(names)}",
-            f"Emails generated: {len(emails)}",
-            f"Email format: {fmt_id}",
-            f"Elapsed: {elapsed:.2f}s",
+            "=" * 50,
+            "  scry — contacts run",
+            "=" * 50,
+            f"  Date      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"  Company   : {company}",
+            f"  Domain    : {domain}",
+            f"  Source    : {src_label}",
+            f"  Queries   : {len(queries)}",
+            f"  Pages/q   : {pages}",
+            f"  Format    : {fmt_id}",
+            "=" * 50,
+            f"  Raw results     : {len(all_items)}",
+            f"  Unique names    : {len(names)}",
+            f"  Emails generated: {len(emails)}",
+            f"  Elapsed         : {elapsed:.2f}s",
+            "=" * 50,
+            "",
+            "Files:",
+            f"  emails.txt        — one email per line",
+            f"  emails.{fmt_out:3s}        — {fmt_out} format with metadata" if fmt_out != "txt" else "",
+            f"  names.txt         — First Last per line",
+            f"  raw_titles.txt    — original Google result titles",
+            f"  run.log           — this file",
         ]
-        write_run_log(run_dir, log_lines)
-        console.print(f"\n[green]Results saved to {run_dir}/[/green]")
+        write_run_log(run_dir, [l for l in log_lines if l is not None])
+
+        if not quiet:
+            console.print(f"\n[green]Results saved to {run_dir}/[/green]")
+            ft = Table(show_header=False, box=None, padding=(0, 2))
+            ft.add_column(style="dim")
+            ft.add_column()
+            ft.add_row("emails.txt", f"{len(emails)} emails")
+            if fmt_out != "txt":
+                ft.add_row(f"emails.{fmt_out}", f"{fmt_out} with metadata")
+            ft.add_row("names.txt", f"{len(emails)} names")
+            ft.add_row("raw_titles.txt", f"{len(emails)} titles")
+            ft.add_row("run.log", "run summary")
+            console.print(ft)
     else:
         write_output(emails, out_file, fmt_out)
         if save_names_path:
@@ -901,7 +932,7 @@ def cmd_contacts(args, cfg, api_key):
                 for e in emails:
                     f.write(e["name"] + "\n")
             console.print(f"[green]Names saved to {save_names_path}[/green]")
-        console.print(f"[green]Saved to {out_file}[/green]")
+        console.print(f"[green]Saved {len(emails)} emails to {out_file}[/green]")
 
     if not quiet:
         t = Table(title="Summary", show_lines=False)
@@ -1039,27 +1070,53 @@ def cmd_files(args, cfg, api_key):
 
     if stdout_mode:
         write_to_stdout(file_results, fmt_out)
-        return 0
 
     if out_dir_base:
         label = domain or company or "dork"
         run_dir = make_run_dir(out_dir_base, "files", label)
-        write_output(file_results, os.path.join(run_dir, f"file_links.{fmt_out}"), fmt_out)
-        write_output(file_results, os.path.join(run_dir, "file_links.txt"), "txt")
-        actual_download_dir = os.path.join(run_dir, "downloads") if do_download else None
         src_label = "Serper + Browser" if (use_serper and use_browser) else ("Serper" if use_serper else "Browser")
+
+        write_output(file_results, os.path.join(run_dir, "file_links.txt"), "txt")
+        if fmt_out != "txt":
+            write_output(file_results, os.path.join(run_dir, f"file_links.{fmt_out}"), fmt_out)
+
+        actual_download_dir = os.path.join(run_dir, "downloads") if do_download else None
+        dork_count = len(resolved) if not input_file else "input-file"
         log_lines = [
-            "scry files run",
-            f"Date: {datetime.now().isoformat()}",
-            f"Domain: {domain or 'N/A'}",
-            f"Company: {company or 'N/A'}",
-            f"Source: {src_label}",
-            f"Dorks: {len(resolved)}",
-            f"File links found: {len(file_results)}",
-            f"Elapsed: {elapsed:.2f}s",
+            "=" * 50,
+            "  scry — files run",
+            "=" * 50,
+            f"  Date      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"  Domain    : {domain or 'N/A'}",
+            f"  Company   : {company or 'N/A'}",
+            f"  Source    : {src_label}",
+            f"  Dorks     : {dork_count}",
+            f"  Pages/dork: {pages}",
+            "=" * 50,
+            f"  File links found: {len(file_results)}",
+            f"  Elapsed         : {elapsed:.2f}s",
+            "=" * 50,
+            "",
+            "Files:",
+            f"  file_links.txt   — one URL per line",
+            f"  file_links.{fmt_out:3s}  — {fmt_out} format with metadata" if fmt_out != "txt" else "",
+            f"  downloads/       — downloaded files" if do_download else "",
+            f"  run.log          — this file",
         ]
-        write_run_log(run_dir, log_lines)
-        console.print(f"\n[green]Results saved to {run_dir}/[/green]")
+        write_run_log(run_dir, [l for l in log_lines if l])
+
+        if not quiet:
+            console.print(f"\n[green]Results saved to {run_dir}/[/green]")
+            ft = Table(show_header=False, box=None, padding=(0, 2))
+            ft.add_column(style="dim")
+            ft.add_column()
+            ft.add_row("file_links.txt", f"{len(file_results)} URLs")
+            if fmt_out != "txt":
+                ft.add_row(f"file_links.{fmt_out}", f"{fmt_out} with metadata")
+            if do_download:
+                ft.add_row("downloads/", "downloaded files")
+            ft.add_row("run.log", "run summary")
+            console.print(ft)
     else:
         write_output(file_results, out_file, fmt_out)
         actual_download_dir = download_dir if do_download else None
@@ -1142,15 +1199,15 @@ Email formats (contacts -f N):
 
 def main() -> int:
     shared = argparse.ArgumentParser(add_help=False)
-    shared.add_argument("--api-key", metavar="KEY", help="Serper API key (or set SERPER_API_KEY env)")
+    shared.add_argument("-k", "--api-key", metavar="KEY", help="Serper API key (or set SERPER_API_KEY env)")
     shared.add_argument("--config", metavar="PATH", help="YAML config (~/.scry.yaml)")
-    shared.add_argument("--quiet", action="store_true", help="Minimal output")
-    shared.add_argument("--verbose", action="store_true", help="Verbose output")
-    shared.add_argument("--format-output", choices=["txt", "json", "csv"], default="txt", help="Output format (default: txt)")
-    shared.add_argument("--stdout", action="store_true", help="Print to stdout (pipe-friendly)")
-    shared.add_argument("--dry-run", action="store_true", help="Show what would run, no execution")
-    shared.add_argument("--output-dir", metavar="DIR", help="Structured output directory (timestamped per run)")
-    shared.add_argument("--source", choices=["auto", "serper", "browser"], default="auto",
+    shared.add_argument("-Q", "--quiet", action="store_true", help="Minimal output")
+    shared.add_argument("-V", "--verbose", action="store_true", help="Verbose output")
+    shared.add_argument("-F", "--format-output", choices=["txt", "json", "csv"], default="txt", help="Output format (default: txt)")
+    shared.add_argument("-S", "--stdout", action="store_true", help="Print to stdout (pipe-friendly)")
+    shared.add_argument("-n", "--dry-run", action="store_true", help="Show what would run, no execution")
+    shared.add_argument("-O", "--output-dir", metavar="DIR", help="Structured output directory (timestamped per run)")
+    shared.add_argument("-s", "--source", choices=["auto", "serper", "browser"], default="auto",
                         help="Data source: auto (both if key), serper (API only), browser (scrape only)")
 
     parser = argparse.ArgumentParser(
@@ -1167,25 +1224,25 @@ def main() -> int:
     p_c.add_argument("-f", "--format", type=int, choices=range(1, 11), default=1, metavar="N",
                      help=f"Email format 1-10. {EMAIL_FORMAT_HELP}")
     p_c.add_argument("-o", "--output", default="emails.txt", metavar="FILE")
-    p_c.add_argument("--save-names", metavar="FILE", help="Also save names to file")
+    p_c.add_argument("-N", "--save-names", metavar="FILE", help="Also save names to file")
     p_c.add_argument("-p", "--pages", type=int, default=10, metavar="N", help="Max pages per query (default: 10)")
-    p_c.add_argument("--delay", type=int, default=3, metavar="SEC")
+    p_c.add_argument("-D", "--delay", type=int, default=3, metavar="SEC", help="Delay between browser pages (default: 3)")
 
     p_f = sub.add_parser("files", parents=[shared], help="Dork for files, download",
                          formatter_class=argparse.RawDescriptionHelpFormatter)
     p_f.add_argument("-q", "--query", action="append", metavar="DORK", help="Dork (repeatable)")
-    p_f.add_argument("--dorks-file", metavar="PATH", help="File with dorks (one per line)")
+    p_f.add_argument("-L", "--dorks-file", metavar="PATH", help="File with dorks (one per line)")
     p_f.add_argument("-c", "--company", metavar="NAME", help="Replaces {company}")
     p_f.add_argument("-d", "--domain", metavar="DOMAIN", help="Replaces {domain}")
     p_f.add_argument("-o", "--output", default="file_links.txt", metavar="FILE")
-    p_f.add_argument("--input-file", metavar="PATH", help="Skip search, download URLs from file")
-    p_f.add_argument("--download", action="store_true", help="Download found files")
+    p_f.add_argument("-i", "--input-file", metavar="PATH", help="Skip search, download URLs from file")
+    p_f.add_argument("-dl", "--download", action="store_true", help="Download found files")
     p_f.add_argument("--download-dir", default="downloads", metavar="DIR")
     p_f.add_argument("-p", "--pages", type=int, default=10, metavar="N", help="Max pages per dork (default: 10)")
-    p_f.add_argument("--delay", type=int, default=3, metavar="SEC")
-    p_f.add_argument("--proxy", metavar="URL")
-    p_f.add_argument("--flaresolverr", metavar="URL")
-    p_f.add_argument("--no-resume", action="store_true")
+    p_f.add_argument("-D", "--delay", type=int, default=3, metavar="SEC", help="Delay between browser pages (default: 3)")
+    p_f.add_argument("-x", "--proxy", metavar="URL", help="HTTP/SOCKS5 proxy")
+    p_f.add_argument("--flaresolverr", metavar="URL", help="FlareSolverr URL for Cloudflare bypass")
+    p_f.add_argument("--no-resume", action="store_true", help="Re-download existing files")
 
     args = parser.parse_args()
 
