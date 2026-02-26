@@ -112,13 +112,18 @@ RESERVED_NAMES = {
 }
 
 TITLE_NOISE = {
-    "dr", "mr", "mrs", "ms", "prof", "sir", "phd", "cpa", "cfa",
+    "dr", "mr", "mrs", "ms", "prof", "sir", "phd", "cpa", "cfa", "pmp",
     "the", "and", "for", "with", "from", "about", "into",
     "top", "best", "new", "old", "bad", "good", "big", "open",
     "all", "any", "how", "why", "who", "what", "our", "you",
     "security", "cyber", "cloud", "data", "team", "lead",
     "senior", "junior", "staff", "chief", "head", "vice",
     "mad", "pro", "iii", "inc", "llc", "ltd",
+    "email", "phone", "number", "contact", "format", "information",
+    "netspi", "tester", "pen", "nonadminuser", "ppeople",
+    "companies", "technologies", "applied", "defense", "proactive",
+    "architect", "executive", "office", "solutions", "barber",
+    "consultant", "director", "manager", "engineer", "specialist",
 }
 
 console = Console()
@@ -478,25 +483,62 @@ def _extract_from_linkedin_url(url: str) -> tuple[str, str] | None:
     return None
 
 
+_RR_STRIP = re.compile(
+    r"\b(email|phone|number|contact|rocketreach|chief|vp|"
+    r"director|manager|senior|junior|president|officer|"
+    r"specialist|consultant|engineer|analyst)\b",
+    re.I,
+)
+
+
 def _extract_from_rocketreach_title(title: str) -> tuple[str, str] | None:
-    """RocketReach titles: 'FirstName LastName - Company | RocketReach'"""
-    parts = re.split(r"[-–—|]", title, maxsplit=1)
-    name_part = re.sub(r"[^a-zA-Z\s]", "", (parts[0] if parts else "")).strip()
+    """
+    RocketReach formats:
+      "Caroline Japic Email & Phone Number | NetSPI Chief Marketing ..."
+      "Hayden Wright Email - Security Consultant @ NetSPI - RocketReach"
+      "FirstName LastName - Title @ Company | RocketReach"
+      "Contact FirstName LastName, Email: ..."
+    Strategy: take text before first separator, strip noise words, use first 2 tokens.
+    """
+    text = title
+    if text.lower().startswith("contact "):
+        text = text[8:]
+    text = text.split(",")[0]
+    parts = re.split(r"[-–—|@]", text, maxsplit=1)
+    name_part = parts[0] if parts else ""
+    name_part = _RR_STRIP.sub("", name_part)
+    name_part = re.sub(r"[^a-zA-Z\s]", "", name_part).strip()
     tokens = name_part.split()
     if len(tokens) >= 2:
-        return tokens[0], tokens[-1]
+        return tokens[0], tokens[1]
     return None
 
 
+_ZI_SKIP_PREFIXES = (
+    "contact", "executive", "architect", "office", "manager",
+    "director", "engineer", "consultant", "specialist", "senior",
+)
+
+
 def _extract_from_zoominfo_title(title: str) -> tuple[str, str] | None:
-    """ZoomInfo people titles: 'FirstName LastName - Title - ZoomInfo'"""
-    if "overview" in title.lower() or "company" in title.lower():
+
+    lower = title.lower()
+    if "overview" in lower or "company" in lower:
         return None
-    parts = re.split(r"[-–—|]", title, maxsplit=1)
-    name_part = re.sub(r"[^a-zA-Z\s]", "", (parts[0] if parts else "")).strip()
+    first_word = lower.split()[0] if lower.split() else ""
+    if first_word in _ZI_SKIP_PREFIXES:
+        return None
+    text = title
+    if text.lower().startswith("contact "):
+        text = text[8:]
+    text = text.split(",")[0]
+    parts = re.split(r"[-–—|]", text, maxsplit=1)
+    name_part = parts[0] if parts else ""
+    name_part = re.sub(r"\bZoomInfo\b", "", name_part, flags=re.I)
+    name_part = re.sub(r"[^a-zA-Z\s]", "", name_part).strip()
     tokens = name_part.split()
     if len(tokens) >= 2:
-        return tokens[0], tokens[-1]
+        return tokens[0], tokens[1]
     return None
 
 
